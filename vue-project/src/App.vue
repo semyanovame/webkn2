@@ -9,7 +9,7 @@
 
     <!-- Панель фильтров -->
     <div class="filters">
-      <input v-model="search" placeholder="🔍 Поиск по адресу..." class="input" />
+      <input v-model="search" placeholder="🔍 Поиск по улице..." class="input" />
       
       <select v-model="filterRooms" class="input">
         <option value="">Любое кол-во комнат</option>
@@ -18,14 +18,21 @@
         <option value="3">3+ комнаты</option>
       </select>
 
-      <select v-model="filterDistrict" class="input">
-        <option value="">Любой район</option>
-        <option v-for="dist in uniqueDistricts" :key="dist" :value="dist">{{ dist }}</option>
+      <!-- НОВЫЙ ФИЛЬТР: Этаж -->
+      <select v-model="filterFloor" class="input">
+        <option value="any">Любой этаж</option>
+        <option value="not_first">Не первый этаж</option>
+        <option value="not_last">Не последний этаж</option>
       </select>
 
-      <div class="price-filter">
-        <label>До {{ filterPrice.toLocaleString() }} ₽</label>
-        <input type="range" v-model.number="filterPrice" :max="maxPrice" step="1000" />
+      <!-- НОВЫЙ ФИЛЬТР: Площадь -->
+      <div class="area-filter">
+        <label>Площадь: от {{ filterAreaMin }} до {{ filterAreaMax }} м²</label>
+        <div class="range-inputs">
+          <input type="number" v-model.number="filterAreaMin" class="input-small" />
+          <span>—</span>
+          <input type="number" v-model.number="filterAreaMax" class="input-small" />
+        </div>
       </div>
 
       <button @click="showFavoritesOnly = !showFavoritesOnly" class="btn-fav-toggle">
@@ -67,13 +74,13 @@
         <h2>{{ selectedItem.title }}</h2>
         
         <div class="gallery">
-          <img v-for="(photo, idx) in selectedItem.photos" :key="idx" :src="photo" />
+          <img v-for="(photo, idx) in (selectedItem.photos || [])" :key="idx" :src="photo" />
         </div>
         
         <div class="details">
           <p><strong>💰 Цена:</strong> {{ selectedItem.price?.toLocaleString() }} ₽/мес</p>
-          <p><strong>📍 Район:</strong> {{ selectedItem.district }}</p>
-          <p><strong>📐 Площадь:</strong> {{ selectedItem.area }} м² ({{ selectedItem.floor }} этаж)</p>
+          <p><strong>📐 Площадь:</strong> {{ selectedItem.area }} м²</p>
+          <p><strong>🏢 Этаж:</strong> {{ selectedItem.floor || 'Не указан' }}</p>
           <p><strong>📝 Описание:</strong> {{ selectedItem.description || 'Описание отсутствует' }}</p>
           <a :href="'https://novosibirsk.etagi.com/realty_rent/' + selectedItem.id + '/'" target="_blank" class="btn-link">
             Открыть на сайте Этажей ↗
@@ -89,25 +96,20 @@ import { ref, computed, onMounted } from 'vue';
 
 const listings = ref([]);
 const search = ref('');
-const filterPrice = ref(100000);
 const filterRooms = ref('');
-const filterDistrict = ref('');
+const filterFloor = ref('any');
+const filterAreaMin = ref(0);
+const filterAreaMax = ref(100);
 const showFavoritesOnly = ref(false);
 const selectedItem = ref(null);
 const isLoading = ref(false);
 
-// Избранное сохраняется в браузере, чтобы не пропадать при обновлении страницы
 const favorites = ref(JSON.parse(localStorage.getItem('etagi_favorites') || '[]'));
 
 const fetchData = async () => {
   try {
     const res = await fetch('http://localhost:3000/api/listings');
     listings.value = await res.json();
-    // Автоматически ставим макс. цену чуть выше самой дорогой квартиры для ползунка
-    if (listings.value.length > 0) {
-      maxPrice.value = Math.ceil(Math.max(...listings.value.map(i => i.price)) / 10000) * 10000;
-      filterPrice.value = maxPrice.value;
-    }
   } catch (e) {
     console.error('Ошибка загрузки данных:', e);
   }
@@ -123,39 +125,28 @@ const refreshData = async () => {
   }
 };
 
-const maxPrice = ref(100000);
-
-// Собираем уникальные районы из полученных данных
-const novosibirskDistricts = [
-  'Центральный район',
-  'Заельцовский район',
-  'Советский район',
-  'Калининский район',
-  'Дзержинский район',
-  'Октябрьский район',
-  'Ленинский район',
-  'Кировский район',
-  'Железнодорожный район',
-  'Первомайский район',
-  'Не указан'
-];
-const uniqueDistricts = computed(() => {
-  const availableDistricts = new Set(listings.value.map(item => item.district));
-  // Возвращаем только те районы из полного списка, которые присутствуют в спаршенных данных
-  return novosibirskDistricts.filter(dist => availableDistricts.has(dist));
-});
-
 // Главная реактивная фильтрация
 const filteredListings = computed(() => {
   return listings.value.filter(item => {
+    // 1. Избранное
     if (showFavoritesOnly.value && !favorites.value.includes(item.id)) return false;
-    if (search.value && !item.title?.toLowerCase().includes(search.value.toLowerCase())) return false;
-    if (item.price > filterPrice.value) return false;
     
+    // 2. Поиск по тексту (улица, адрес)
+    if (search.value && !item.title?.toLowerCase().includes(search.value.toLowerCase())) return false;
+    
+    // 3. Комнаты
     if (filterRooms.value === '3' && item.rooms < 3) return false;
     if (filterRooms.value && filterRooms.value !== '3' && item.rooms !== Number(filterRooms.value)) return false;
     
-    if (filterDistrict.value && item.district !== filterDistrict.value) return false;
+    // 4. Этаж (парсим строку "7/14" -> текущий 7, всего 14)
+    if (filterFloor.value !== 'any' && item.floor) {
+      const [current, total] = item.floor.split('/').map(Number);
+      if (filterFloor.value === 'not_first' && current === 1) return false;
+      if (filterFloor.value === 'not_last' && current === total) return false;
+    }
+    
+    // 5. Площадь
+    if (item.area < filterAreaMin.value || item.area > filterAreaMax.value) return false;
     
     return true;
   });
@@ -182,9 +173,11 @@ onMounted(fetchData);
 <style scoped>
 .app { max-width: 1200px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; color: #333; }
 header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; align-items: center; }
 .input { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
-.price-filter { display: flex; flex-direction: column; justify-content: center; min-width: 150px; }
+.input-small { width: 70px; padding: 6px; border: 1px solid #ddd; border-radius: 4px; text-align: center; }
+.area-filter { display: flex; flex-direction: column; gap: 4px; }
+.range-inputs { display: flex; align-items: center; gap: 5px; }
 .btn-refresh, .btn-fav-toggle { padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
 .btn-refresh:disabled { background: #ccc; cursor: not-allowed; }
 .count { font-size: 1.1em; color: #555; margin-bottom: 15px; }
@@ -201,7 +194,6 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .btn-card-fav { width: 100%; padding: 10px; background: #f8f9fa; border: 1px solid #eee; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
 .btn-card-fav:hover { background: #e2e6ea; }
 
-/* Модальное окно */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(3px); }
 .modal { background: white; padding: 25px; border-radius: 12px; max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; position: relative; }
 .btn-close { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 1.8em; cursor: pointer; color: #666; }
