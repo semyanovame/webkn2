@@ -6,7 +6,6 @@ const BASE = 'https://novosibirsk.etagi.com';
 function cleanDescription(raw) {
   let text = raw.replace(/\s+/g, ' ').trim();
 
-  // Отрезаем мусор в начале: "Описание", "Изменено: ...", "N просмотров"
   const viewMatch = text.match(/просмотр\w*\s*/i);
   if (viewMatch && viewMatch.index < 100) {
     text = text.slice(viewMatch.index + viewMatch[0].length);
@@ -14,7 +13,6 @@ function cleanDescription(raw) {
     text = text.replace(/^Описание\s*/i, '');
   }
 
-  // Отрезаем мусор в конце: "Показать больше/меньше", "Скрыть"
   text = text.replace(/\s*(?:Показать\s*(?:больше|меньше)|Скрыть)\s*$/i, '');
 
   return text.trim();
@@ -29,7 +27,7 @@ async function parseEtagi() {
   const page = await context.newPage();
 
   try {
-    console.log('📋 Шаг 1: Парсинг списка карточек...');
+    console.log('Шаг 1: Парсинг списка карточек...');
     await page.goto(`${BASE}/realty_rent/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await page.waitForSelector('[data-testid="object_card"]', { timeout: 15000 });
     await page.waitForTimeout(1500);
@@ -76,9 +74,8 @@ async function parseEtagi() {
       listings.push({ id, title, price, district: 'Не указан', rooms, area, floor, photos, description: '' });
     });
 
-    console.log(`📋 Найдено ${listings.length} карточек. Загружаем описания и районы...`);
+    console.log(`Найдено ${listings.length} карточек. Загружаем описания и районы...`);
 
-    // ШАГ 2: Страница объекта → описание + район
     for (let i = 0; i < listings.length; i++) {
       const item = listings[i];
       try {
@@ -116,21 +113,20 @@ async function parseEtagi() {
         item.description = cleanDescription(description);
         if (item.description.length > 2000) item.description = item.description.slice(0, 2000) + '...';
 
-        // 🎯 Район извлекаем из описания (там он реально есть!)
         const distMatch = item.description.match(/([А-ЯЁ][а-яё]+(?:\s[А-ЯЁ][а-яё]+)?)\s+район/i);
         if (distMatch) item.district = distMatch[1].trim() + ' район';
 
-        console.log(`  ✅ [${i + 1}/${listings.length}] ${item.district} | ${item.description.slice(0, 50)}...`);
+        console.log(`[${i + 1}/${listings.length}] ${item.district} | ${item.description.slice(0, 50)}...`);
       } catch (e) {
-        console.log(`  ⚠️ [${i + 1}/${listings.length}] ${item.id}: ${e.message.slice(0, 50)}`);
+        console.log(`[${i + 1}/${listings.length}] ${item.id}: ${e.message.slice(0, 50)}`);
         item.description = 'Не удалось загрузить описание';
       }
     }
 
-    console.log(`✅ Готово. Спарсено ${listings.length} объявлений`);
+    console.log(`Готово. Спарсено ${listings.length} объявлений`);
     return listings;
   } catch (error) {
-    console.error('❌ Ошибка при парсинге:', error.message);
+    console.error('Ошибка при парсинге:', error.message);
     return [];
   } finally {
     await browser.close();

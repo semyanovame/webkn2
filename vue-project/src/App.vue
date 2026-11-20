@@ -1,15 +1,14 @@
 <template>
   <div class="app">
     <header>
-      <h1>🏠 Аренда жилья в Новосибирске</h1>
+      <h1>Аренда жилья в Новосибирске</h1>
       <button @click="refreshData" :disabled="isLoading" class="btn-refresh">
-        {{ isLoading ? 'Обновляем...' : '🔄 Обновить данные' }}
+        {{ isLoading ? 'Обновляем...' : 'Обновить данные' }}
       </button>
     </header>
 
-    <!-- Панель фильтров -->
     <div class="filters">
-      <input v-model="search" placeholder="🔍 Поиск по улице..." class="input" />
+      <input v-model="search" placeholder="Поиск по улице..." class="input" />
       
       <select v-model="filterRooms" class="input">
         <option value="">Любое кол-во комнат</option>
@@ -18,14 +17,12 @@
         <option value="3">3+ комнаты</option>
       </select>
 
-      <!-- НОВЫЙ ФИЛЬТР: Этаж -->
       <select v-model="filterFloor" class="input">
         <option value="any">Любой этаж</option>
         <option value="not_first">Не первый этаж</option>
         <option value="not_last">Не последний этаж</option>
       </select>
 
-      <!-- НОВЫЙ ФИЛЬТР: Площадь -->
       <div class="area-filter">
         <label>Площадь: от {{ filterAreaMin }} до {{ filterAreaMax }} м²</label>
         <div class="range-inputs">
@@ -36,19 +33,16 @@
       </div>
 
       <button @click="showFavoritesOnly = !showFavoritesOnly" class="btn-fav-toggle">
-        {{ showFavoritesOnly ? 'Показать все' : '❤️ Избранное' }}
+        {{ showFavoritesOnly ? 'Показать все' : 'Избранное' }}
       </button>
     </div>
 
-    <!-- Счётчик -->
     <p class="count">Найдено объявлений: <strong>{{ filteredListings.length }}</strong></p>
 
-    <!-- Сообщение, если ничего не найдено -->
     <div v-if="filteredListings.length === 0" class="no-results">
-      😔 По выбранным условиям объявления не найдены. Попробуйте смягчить фильтры.
+      По выбранным условиям объявления не найдены. Попробуйте смягчить фильтры.
     </div>
 
-    <!-- Сетка карточек -->
     <div class="grid">
       <div v-for="item in filteredListings" :key="item.id" class="card" @click="openDetail(item)">
         <img :src="item.photos?.[0] || 'https://via.placeholder.com/300x200?text=Нет+фото'" alt="Фото" />
@@ -61,16 +55,15 @@
             {{ item.floor ? item.floor + ' эт.' : '' }}
           </p>
           <button @click.stop="toggleFavorite(item.id)" class="btn-card-fav">
-            {{ isFavorite(item.id) ? '💔 Убрать' : '🤍 В избранное' }}
+            {{ isFavorite(item.id) ? 'Убрать' : 'В избранное' }}
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Модальное окно с деталями -->
     <div v-if="selectedItem" class="modal-overlay" @click.self="selectedItem = null">
       <div class="modal">
-        <button @click="selectedItem = null" class="btn-close">✕</button>
+        <button @click="selectedItem = null" class="btn-close">X</button>
         <h2>{{ selectedItem.title }}</h2>
         
         <div class="gallery">
@@ -78,12 +71,12 @@
         </div>
         
         <div class="details">
-          <p><strong>💰 Цена:</strong> {{ selectedItem.price?.toLocaleString() }} ₽/мес</p>
-          <p><strong>📐 Площадь:</strong> {{ selectedItem.area }} м²</p>
-          <p><strong>🏢 Этаж:</strong> {{ selectedItem.floor || 'Не указан' }}</p>
-          <p><strong>📝 Описание:</strong> {{ selectedItem.description || 'Описание отсутствует' }}</p>
+          <p><strong>Цена:</strong> {{ selectedItem.price?.toLocaleString() }} ₽/мес</p>
+          <p><strong>Площадь:</strong> {{ selectedItem.area }} м²</p>
+          <p><strong>Этаж:</strong> {{ selectedItem.floor || 'Не указан' }}</p>
+          <p><strong>Описание:</strong> {{ selectedItem.description || 'Описание отсутствует' }}</p>
           <a :href="'https://novosibirsk.etagi.com/realty_rent/' + selectedItem.id + '/'" target="_blank" class="btn-link">
-            Открыть на сайте Этажей ↗
+            Открыть на сайте Этажей
           </a>
         </div>
       </div>
@@ -125,27 +118,21 @@ const refreshData = async () => {
   }
 };
 
-// Главная реактивная фильтрация
 const filteredListings = computed(() => {
   return listings.value.filter(item => {
-    // 1. Избранное
     if (showFavoritesOnly.value && !favorites.value.includes(item.id)) return false;
     
-    // 2. Поиск по тексту (улица, адрес)
     if (search.value && !item.title?.toLowerCase().includes(search.value.toLowerCase())) return false;
     
-    // 3. Комнаты
     if (filterRooms.value === '3' && item.rooms < 3) return false;
     if (filterRooms.value && filterRooms.value !== '3' && item.rooms !== Number(filterRooms.value)) return false;
     
-    // 4. Этаж (парсим строку "7/14" -> текущий 7, всего 14)
     if (filterFloor.value !== 'any' && item.floor) {
       const [current, total] = item.floor.split('/').map(Number);
       if (filterFloor.value === 'not_first' && current === 1) return false;
       if (filterFloor.value === 'not_last' && current === total) return false;
     }
     
-    // 5. Площадь
     if (item.area < filterAreaMin.value || item.area > filterAreaMax.value) return false;
     
     return true;
